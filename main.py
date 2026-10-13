@@ -6,7 +6,7 @@ from typing import Optional
 app = FastAPI(title="Invoice Extraction Service")
 
 class InvoiceRequest(BaseModel):
-    text: Optional[str] = None
+    text: Optional[str] = ""
 
 class InvoiceResponse(BaseModel):
     vendor: str
@@ -16,23 +16,22 @@ class InvoiceResponse(BaseModel):
 
 @app.post("/extract", response_model=InvoiceResponse)
 def extract_invoice(payload: InvoiceRequest):
+    # Validate input: return 422 for empty, whitespace, or missing text instead of crashing
     if not payload or not payload.text or not payload.text.strip():
         raise HTTPException(
-            status_ico=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid or empty invoice text provided."
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Empty or missing invoice text provided."
         )
     
     text = payload.text
 
-    # 1. Improved Vendor extraction: look for Acme-xxx or explicit label, or take the first non-empty line
+    # 1. Vendor extraction (supports Acme-xxxx style names and labeled fields)
     vendor_match = re.search(r"(?:Vendor|From|Company|Name):\s*([^\n]+)", text, re.IGNORECASE)
     if not vendor_match:
-        # Look for Acme-style or company identifiers directly in the text
         acme_match = re.search(r"(Acme-[A-Za-z0-9\-]+(?:\s+Industries\s+Ltd\.?)?)", text, re.IGNORECASE)
         if acme_match:
             vendor = acme_match.group(1).strip()
         else:
-            # Fallback to the first line or first few words if no label/Acme is found
             lines = [line.strip() for line in text.split("\n") if line.strip()]
             vendor = lines[0] if lines else "Unknown Vendor"
     else:
